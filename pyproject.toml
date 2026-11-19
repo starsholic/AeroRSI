@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aerorsi"
+version = "1.0.0"
+description = "AeroRSI: Recursive Self-Improvement for Aerial Vision-Language Navigation"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+
+[project.scripts]
+aerorsi = "aerorsi.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["aerorsi*"]
+
+[tool.setuptools.package-data]
+"aerorsi.sim" = ["airsim_settings.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

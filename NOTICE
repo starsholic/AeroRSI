@@ -1,0 +1,14 @@
+AeroRSI
+Copyright 2026 The AeroRSI Authors
+
+This product includes software and data derived from AeroDPO and AeroVLA
+(https://github.com/XuPeng23/AeroDPO, https://github.com/XuPeng23/AeroVLA), licensed under the Apache License 2.0:
+  - aerorsi/sim/drone.py and aerorsi/sim/airsim_settings.json: the AirSim client operations, the native action
+    controller and the simulator settings of the TravelUAV evaluation tools;
+  - aerorsi/repair/proposals.py: the artificial potential field expert;
+  - aerorsi/policy.py: the input and prompt construction of the AeroVLA policy wrapper;
+  - data/spawn_areas.json and the test splits in data/splits/: TravelUAV map metadata and validation splits as
+    distributed with AeroDPO.
+
+The TravelUAV benchmark (https://github.com/prince687028/TravelUAV), its dataset and simulator environments, and the
+AeroVLA-2B-384 checkpoint are not included and are subject to their own terms.

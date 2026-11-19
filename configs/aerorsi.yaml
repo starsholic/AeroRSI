@@ -1,0 +1,58 @@
+# AeroRSI: the settings of the paper's main experiment (three rounds from the SFT policy).
+# Relative paths are resolved against the repository root.
+
+seed: 20261002
+
+paths:
+  manifest: outputs/manifest.json                # written by `aerorsi prepare`
+  envs: envs                                     # TravelUAV simulator environments (see docs/INSTALL.md)
+
+model:
+  base: checkpoints/AeroVLA-2B-384-Merged        # the supervised AeroVLA policy (from AeroDPO's release)
+  attention: sdpa
+
+protocol:
+  max_actions: 200                               # per episode, as in the public evaluator
+
+resources:
+  workers_per_gpu: 4                             # simulator + policy pairs per GPU (about 9 GB each)
+  port_base: 29200                               # worker i uses RPC port port_base + i
+  cpu_threads_per_worker: 2
+  startup_stagger_seconds: 3
+  worker_respawns: 2
+
+repair:
+  probe_offsets: [1, 2, 4, 8, 16]                # anchors this many actions before the end of a failed episode
+  anchor_budget: 2400                            # anchors per round, drawn uniformly over all probes
+  min_step: 5                                    # ignore the first actions of an episode
+  policy_samples: 4                              # sampled candidates from the current policy
+  temperature: 1.0
+  proposals: [apf, apf_translate, climb]         # rule-based candidates
+  stop_candidates: true                          # a sampled stop may be a candidate
+  horizon: 8                                     # continuation length: max(horizon, offset + horizon_extra) ...
+  horizon_extra: 4
+  horizon_max: 20                                # ... capped here
+  min_progress_m: 4.0                            # a candidate qualifies by reaching the target or this progress
+  advantage_margin_m: 4.0                        # or the failed action must lose by this margin
+  collision_penalty: 100.0
+  stop_penalty: 100.0
+  success_bonus: 20.0
+  confirm_attempts: 2                            # candidates tried in the confirmation flight
+
+normal:                                          # normal-state inputs for retention, from round 0's own flights
+  flights: 840                                   # successful flights (one per trajectory group), three states each
+  eval_fraction: 0.2                             # trajectory groups held out of training
+
+assembly:
+  repair_weight: 0.8                             # share of the total supervision weight on repairs
+  replay_fraction: 0.3                           # share of the repair weight replayed from the previous round
+  heldout_fraction: 0.2                          # repair trajectory groups held out of training
+
+train:
+  learning_rate: 2.0e-5
+  epochs: 2
+  global_batch: 16
+  per_device_batch: 4
+  max_grad_norm: 1.0
+  save_steps: 50
+  dataloader_workers: 2

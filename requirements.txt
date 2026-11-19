@@ -1,0 +1,18 @@
+# Python dependencies of AeroRSI; scripts/setup_env.sh installs them, then AirSim and the compiled MessagePack codec.
+torch==2.10.0
+torchvision==0.25.0
+transformers==5.5.4
+peft==0.19.1
+accelerate==1.13.0
+numpy==2.2.6
+qwen-vl-utils==0.0.14
+pillow
+scipy
+pyyaml
+pytest
+# AirSim declares the contrib OpenCV distribution; keep exactly one cv2 provider.
+opencv-contrib-python==5.0.0.93
+# The legacy RPC stack AirSim is built against (see aerorsi/sim/rpc.py).
+msgpack-python==0.5.6
+msgpack-rpc-python==0.4.1
+tornado==4.5.3

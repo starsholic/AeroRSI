@@ -1,0 +1,10 @@
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.DS_Store
+
+# downloaded or generated, never committed
+outputs/
+checkpoints/
+envs/
+dataset_raw/
