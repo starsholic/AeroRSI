@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AeroRSI</title>
+<meta name="description" content="AeroRSI: an aerial navigation policy that judges its own repairs by flying on from them, learns the verified repairs, and repeats on the failures that remain.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: a video-first page. One-line title, a demo reel, then short sections in a 1100px column; text spans the
+   column. Palette from the paper's figures: flight-path blue, crash red, completion green. */
+:root {
+  --bg: #fbfcfd;
+  --fg: #16212c;
+  --muted: #586776;
+  --line: #d9e1e8;
+  --accent: #2c6aa8;
+  --accent-soft: #e8f0f8;
+  --band: #f1f5f9;
+  --ours: #edf4fb;
+  --figure: #ffffff;
+  --crash: #c4412c;
+  --done: #2b8257;
+  --screen: #0e1822;
+  --screen-line: #1f3346;
+  --screen-text: #a9bdd0;
+  --line-sft: #2c6aa8;
+  --line-dpo: #d9822b;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --fg: #e5ecf2; --muted: #9babb9; --line: #26323d; --accent: #7fb2e8; --accent-soft: #172638;
+    --band: #141c24; --ours: #15263a; --figure: #ffffff; --crash: #ef7a65; --done: #5cc28d;
+    --screen: #0a1118; --screen-line: #1d2d3d; --screen-text: #8fa6bb; --line-sft: #7fb2e8; --line-dpo: #f0a35a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --fg: #e5ecf2; --muted: #9babb9; --line: #26323d; --accent: #7fb2e8; --accent-soft: #172638;
+  --band: #141c24; --ours: #15263a; --figure: #ffffff; --crash: #ef7a65; --done: #5cc28d;
+  --screen: #0a1118; --screen-line: #1d2d3d; --screen-text: #8fa6bb; --line-sft: #7fb2e8; --line-dpo: #f0a35a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 1rem; line-height: 1.6; }
+.band { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.band.tint { background: var(--band); }
+.inner { max-width: 1100px; margin: 0 auto; padding-block: 56px; display: grid; gap: 24px; }
+.prose { max-width: none; }
+.abstract { font-size: 1.1rem; line-height: 1.7; }
+.abstract strong { font-weight: 600; }
+p, figcaption, .caption { text-wrap: pretty; }  /* no lone last words; the last three words are also joined by no-break spaces */
+h1, h2, h3 { margin: 0; line-height: 1.2; text-wrap: balance; }
+h2 { font-size: 1.6rem; font-weight: 600; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.muted { color: var(--muted); }
+
+/* title block */
+.hero .inner { max-width: 1240px; padding-block: 56px 28px; text-align: center; justify-items: center; gap: 16px; }
+.hero h1 { font-size: min(2rem, 2.2vw); font-weight: 600; letter-spacing: -0.012em; white-space: nowrap; }
+.hero h1 b { color: var(--accent); font-weight: 600; }
+.authors { font-size: 1.05rem; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; }
+.authors sup, .affil sup { font-size: 0.7em; }
+.affil { color: var(--muted); font-size: 0.93rem; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 16px; max-width: 980px; }
+.links { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 8px; }
+.links a, .links span {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 18px; border-radius: 999px; font-weight: 500;
+  font-size: 0.95rem; text-decoration: none; border: 1px solid var(--line);
+}
+.links a { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.links a:hover { opacity: 0.88; }
+.links span { color: var(--muted); }
+.links svg { width: 16px; height: 16px; fill: currentColor; }
+
+/* video slots: a placeholder until static/videos/<name>.mp4 exists, then the video itself */
+.slot { position: relative; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 10px; overflow: hidden; background: var(--screen);
+  background-image: linear-gradient(var(--screen-line) 1px, transparent 1px), linear-gradient(90deg, var(--screen-line) 1px, transparent 1px);
+  background-size: 48px 48px; display: grid; place-items: center; }
+.slot .ph { display: grid; justify-items: center; gap: 10px; color: var(--screen-text); text-align: center; padding: 16px; }
+.slot .ph svg { width: 46px; height: 46px; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.slot .ph b { font-family: var(--font-mono); font-size: 0.82rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 500; }
+.slot .ph span { font-size: 0.9rem; }
+.slot video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+.reel .slot { border-radius: 12px; }
+.caption { color: var(--muted); font-size: 0.92rem; }
+
+/* tl;dr */
+.tldr { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 40px; align-items: center; }
+.tldr p { font-size: 1.15rem; line-height: 1.55; }
+.stats { display: grid; gap: 14px; }
+.stats { grid-template-columns: max-content minmax(0, 1fr); column-gap: 0; }
+.stat { display: contents; }
+.stat strong, .stat span { border-top: 1px solid var(--line); padding-top: 12px; }
+.stat strong { font-family: var(--font-mono); font-size: 1.35rem; font-weight: 500; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat span { color: var(--muted); font-size: 0.95rem; padding-left: 18px; }
+.stat strong, .stat span { padding-bottom: 2px; }
+
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+figure .img { background: var(--figure); border-radius: 8px; padding: 10px; border: 1px solid var(--line); }
+figure img { display: block; width: 100%; height: auto; }
+figcaption { color: var(--muted); font-size: 0.92rem; }
+
+/* method */
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.step { border-top: 3px solid var(--accent); padding-top: 14px; display: grid; gap: 6px; align-content: start; }
+.step .eyebrow { color: var(--muted); }
+.strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.frame { display: grid; gap: 6px; margin: 0; }
+.frame img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; border: 2px solid transparent; max-width: 100%; }
+.frame.fail img { border-color: var(--crash); }
+.frame span { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); text-align: center; }
+.frame.fail span { color: var(--crash); font-weight: 500; }
+
+/* demos */
+.demos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.demo { display: grid; gap: 8px; min-width: 0; }
+.demo .meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 0.9rem; }
+.demo .meta b { font-weight: 600; }
+.tag { font-family: var(--font-mono); font-size: 0.76rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.outcome { display: flex; gap: 14px; font-size: 0.86rem; color: var(--muted); }
+.outcome i { font-style: normal; }
+.outcome .x { color: var(--crash); }
+.outcome .ok { color: var(--done); }
+
+/* demos by claim */
+.claim { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.5fr); gap: 28px; align-items: center;
+  border-top: 1px solid var(--line); padding-top: 24px; }
+.claim-text { display: grid; gap: 10px; }
+.claim-text p { color: var(--muted); font-size: 0.96rem; }
+
+/* results: a lead line, the table, then two figure cards of equal height */
+.lead { font-size: 1.08rem; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: stretch; }
+.card { background: var(--figure); color: #16212c; border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px 14px; display: grid;
+  grid-template-rows: auto 1fr auto; gap: 10px; min-width: 0; }
+.card h3 { font-size: 0.98rem; }
+.card .plot { display: grid; place-items: center; min-height: 0; }
+.card .plot img, .card .plot svg { display: block; width: 100%; height: auto; }
+.card p { color: #586776; font-size: 0.9rem; }
+.chart { background: transparent; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart text { font-family: var(--font-mono); font-size: 11px; fill: #586776; }
+.chart .grid { stroke: #d9e1e8; stroke-width: 1; }
+.chart .sft { stroke: #2c6aa8; fill: none; stroke-width: 2.5; }
+.chart .dpo { stroke: #d9822b; fill: none; stroke-width: 2.5; }
+.chart .dot-sft { fill: #2c6aa8; }
+.chart .dot-dpo { fill: #d9822b; }
+.chart text.v { fill: #16212c; font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.86rem; color: #586776; }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+th, td { padding: 8px 12px; text-align: right; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-weight: 600; }
+tbody tr:last-child td { border-bottom: 0; }
+tr.ours td { background: var(--ours); font-weight: 500; }
+
+/* bibtex */
+.bib { position: relative; background: var(--band); border-radius: 8px; border: 1px solid var(--line); }
+.bib pre { margin: 0; padding: 18px 20px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.85rem; line-height: 1.55; }
+.bib button { position: absolute; top: 10px; right: 10px; font: 500 0.82rem var(--font-body); padding: 5px 12px; border-radius: 6px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
+
+@media (max-width: 900px) {
+  .hero h1 { white-space: normal; font-size: 1.55rem; }
+  .tldr, .cards, .steps, .demos, .claim { grid-template-columns: minmax(0, 1fr); }
+  .strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .inner { padding-block: 40px; }
+}
+@media (prefers-reduced-motion: no-preference) { .links a { transition: opacity 0.15s; } }
+</style>
+</head>
+<body>
+
+<header class="band hero">
+  <div class="inner">
+    <h1><b>AeroRSI</b>: Recursive Self-Improvement for Aerial Vision-Language Navigation</h1>
+    <div class="authors">
+      <span>Shiwei Wu<sup>1</sup></span><span>Yuwen Pan<sup>1</sup></span><span>Zhi Li<sup>1</sup></span>
+      <span>Yaowen Li<sup>2</sup></span><span>Yan Zhou<sup>3</sup></span><span>Xuemiao Xu<sup>4</sup></span>
+      <span>Yu Liu<sup>2,&dagger;</sup></span>
+    </div>
+    <div class="affil">
+      <span><sup>1</sup>Shenzhen International Graduate School, Tsinghua University</span>
+      <span><sup>2</sup>Department of Electronic Engineering, Tsinghua University</span>
+      <span><sup>3</sup>Foshan University</span>
+      <span><sup>4</sup>South China University of Technology</span>
+      <span><sup>&dagger;</sup>Corresponding author</span>
+    </div>
+    <nav class="links" aria-label="Resources">
+      <a href="https://arxiv.org/abs/2611.24077">📄 arXiv</a>
+      <a href="https://github.com/starsholic/AeroRSI"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+      <a href="https://huggingface.co/papers/2611.24077">🤗 Daily Paper</a>
+      <a href="https://huggingface.co/DavidWu1116/AeroRSI">🤗 Models</a>
+      <a href="#bibtex">BibTeX</a>
+    </nav>
+  </div>
+</header>
+
+<section class="band" aria-label="Demo reel">
+  <div class="inner reel" style="padding-block: 8px 48px;">
+    <div class="slot" data-video="static/videos/demo_reel.mp4" data-poster="static/videos/demo_reel.jpg"><div class="ph"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21"/><path d="M20 16l13 8-13 8z"/></svg><b>Demo reel</b><span>Video coming soon</span></div></div>
+    <p class="caption">One round of repair at one failure, three generations of the policy on one test route, and the whole test set. Translucent drones are separate recorded flights composited along one camera path. Music: &ldquo;The Spectre&rdquo; by Alan&nbsp;Walker&nbsp;(instrumental).</p>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="tldr">
+  <div class="inner" style="padding-block: 8px 56px;">
+    <div class="tldr">
+      <div style="display: grid; gap: 10px;">
+        <div class="eyebrow" id="tldr">TL;DR</div>
+        <p>A drone navigation policy repairs its own failures: before each failure, it flies on from every candidate action, keeps the actions it can complete, learns them, and repeats on the failures&nbsp;that&nbsp;remain.</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><strong>46.4 &rarr; 67.5%</strong><span>test success rate, three&nbsp;rounds</span></div>
+        <div class="stat"><strong>38.6 &rarr; 19.1%</strong><span>collision rate, halved</span></div>
+        <div class="stat"><strong>+10.6</strong><span>points over AeroDPO (prior SOTA baseline), with no extra labels or&nbsp;inference&nbsp;cost</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band tint" aria-labelledby="abstract">
+  <div class="inner">
+    <h2 id="abstract">Abstract</h2>
+    <p class="prose abstract">Vision-language-action drone policies still fail often in closed-loop flight, and the repairs they need are beyond what human pilots can label or rule-based planners can reliably supply. <strong>AeroRSI lets the policy judge its own repairs by flying on from them</strong>: it keeps only the candidate actions it completes, so even rule-based proposals that hurt when imitated directly become reliable supervision. Since each repair can reveal the next failure, <strong>AeroRSI repeats on the failures that remain</strong>. On TravelUAV, three rounds lift a 2B-parameter policy <strong>from&nbsp;46.4% to&nbsp;67.5%&nbsp;success</strong>, 10.6 points above AeroDPO (prior SOTA baseline), with no extra human labels or&nbsp;inference&nbsp;cost.</p>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="motivation">
+  <div class="inner">
+    <div class="eyebrow">Motivation</div>
+    <h2 id="motivation">Each repair uncovers the next failure</h2>
+    <figure>
+      <div class="img"><img src="static/teaser.jpg" width="2000" height="496" alt="Round k: the policy fails at A and judges its candidate repairs by flying on; after learning them, the next policy passes A and fails later at B; test success rate rises over three rounds."></div>
+      <figcaption>(a) The policy fails at A and keeps only the candidate repairs it completes when flying on. (b) Having learned them, it passes A and fails at B, which A had hidden. (c) Test success rate by round; dashed: the previous state of the art from the&nbsp;same&nbsp;policy.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="method">
+  <div class="inner" style="padding-top: 0;">
+    <div class="eyebrow">Method</div>
+    <h2 id="method">One round of AeroRSI</h2>
+    <figure>
+      <div class="img"><img src="static/framework.jpg" width="1950" height="822" alt="Framework: adaptive failure anchoring, continuation-verified repair and retentive repair learning, repeated with the new policy."></div>
+    </figure>
+    <div class="steps">
+      <div class="step">
+        <div class="eyebrow">1 &middot; Anchor</div>
+        <h3>Adaptive failure anchoring</h3>
+        <p>The policy flies every training route. Anchors are drawn 1 to 16 actions before each failure, so they track the failures&nbsp;that&nbsp;remain.</p>
+      </div>
+      <div class="step">
+        <div class="eyebrow">2 &middot; Verify</div>
+        <h3>Continuation-verified repair</h3>
+        <p>From each anchor, the policy flies on after every candidate: the failed action, its own samples and rule-based proposals. A candidate that completes twice becomes&nbsp;a&nbsp;repair.</p>
+      </div>
+      <div class="step">
+        <div class="eyebrow">3 &middot; Learn</div>
+        <h3>Retentive repair learning</h3>
+        <p>The next policy learns the repairs, replays earlier ones, and keeps its own actions at&nbsp;normal&nbsp;states.</p>
+      </div>
+    </div>
+    <figure>
+      <div class="strip">
+        <figure class="frame"><img src="static/tf-16.jpg" width="384" height="384" alt="Front view 16 actions before a crash"><span>t<sub>f</sub> &minus; 16</span></figure>
+        <figure class="frame"><img src="static/tf-8.jpg" width="384" height="384" alt="Front view 8 actions before a crash"><span>t<sub>f</sub> &minus; 8</span></figure>
+        <figure class="frame"><img src="static/tf-4.jpg" width="384" height="384" alt="Front view 4 actions before a crash"><span>t<sub>f</sub> &minus; 4</span></figure>
+        <figure class="frame"><img src="static/tf-2.jpg" width="384" height="384" alt="Front view 2 actions before a crash"><span>t<sub>f</sub> &minus; 2</span></figure>
+        <figure class="frame"><img src="static/tf-1.jpg" width="384" height="384" alt="Front view 1 action before a crash"><span>t<sub>f</sub> &minus; 1</span></figure>
+        <figure class="frame fail"><img src="static/tf.jpg" width="384" height="384" alt="Front view at the crash"><span>t<sub>f</sub> crash</span></figure>
+      </div>
+      <figcaption>Probes before one crash. Early probes may already be committed to the crash and late ones too late; several offsets let the verifier find where a repair&nbsp;still&nbsp;works.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="band tint" aria-labelledby="demos">
+  <div class="inner">
+    <div class="eyebrow">Demos</div>
+    <h2 id="demos">A policy that improves from its own flights</h2>
+    <div class="claim">
+      <div class="claim-text">
+        <div class="eyebrow">1 &middot; One round</div>
+        <h3>It judges its own repairs by flying on</h3>
+        <p>Before a crash, GEN 0 flies on after four of its own samples and one rule-based climb. The samples crash; the climb completes and becomes the repair. Trained on such repairs, GEN 1 climbs&nbsp;by&nbsp;itself.</p>
+        <p>Where only a proposal repaired an anchor, a new sample of the policy succeeds 62.1% of the time after one round, up&nbsp;from&nbsp;11.0%.</p>
+      </div>
+      <div class="slot" data-loop data-video="static/videos/evolution.mp4" data-poster="static/videos/evolution.jpg"><div class="ph"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21"/><path d="M20 16l13 8-13 8z"/></svg><b>One round at one anchor</b><span>Video coming soon</span></div></div>
+    </div>
+    <div class="claim">
+      <div class="claim-text">
+        <div class="eyebrow">2 &middot; Recurse</div>
+        <h3>Each repair uncovers the next failure</h3>
+        <p>The supervised policy crashes at A. After one round it passes A and crashes at B, which A had hidden; after two rounds it reaches&nbsp;the&nbsp;target.</p>
+      </div>
+      <div class="slot" data-loop data-video="static/videos/generations.mp4" data-poster="static/videos/generations.jpg"><div class="ph"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21"/><path d="M20 16l13 8-13 8z"/></svg><b>Rounds 0 to 2 on one route</b><span>Video coming soon</span></div></div>
+    </div>
+    <div class="claim">
+      <div class="claim-text">
+        <div class="eyebrow">3 &middot; Population</div>
+        <h3>The whole test set improves</h3>
+        <p>Each square is one of the 3,005 test routes: green reaches the target, red collides, amber fails otherwise. Success rises from 46.4% to 67.5%, collisions fall from 38.6%&nbsp;to&nbsp;19.1%.</p>
+      </div>
+      <div class="slot" data-loop data-video="static/videos/population.mp4" data-poster="static/videos/population.jpg"><div class="ph"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21"/><path d="M20 16l13 8-13 8z"/></svg><b>3,005 test routes</b><span>Video coming soon</span></div></div>
+    </div>
+    <p class="prose muted" style="margin-top: 4px;">Each drone is a recorded flight of a policy in TravelUAV, replayed from its poses; translucent drones are separate flights composited along one camera path. Test routes follow the evaluation protocol; candidates at an anchor fly under the paused&nbsp;collection&nbsp;cadence.</p>
+  </div>
+</section>
+
+<section class="band" aria-labelledby="results">
+  <div class="inner">
+    <div class="eyebrow">Results</div>
+    <h2 id="results">TravelUAV test splits</h2>
+    <p class="lead">Each round raises the success rate, with diminishing gains. Started from AeroDPO (prior SOTA baseline), the same loop adds&nbsp;13.0&nbsp;points.</p>
+    <div class="scroll" role="region" aria-label="Success rate by split" tabindex="0">
+          <table>
+            <thead><tr><th>SR (%)</th><th>Seen</th><th>Unseen obj.</th><th>Unseen map</th><th>Overall</th></tr></thead>
+            <tbody>
+              <tr><td>Supervised policy</td><td>48.38</td><td>56.44</td><td>36.85</td><td>46.39</td></tr>
+              <tr><td>AeroDPO (prior SOTA baseline)</td><td>60.01</td><td>66.45</td><td>45.93</td><td>56.87</td></tr>
+              <tr class="ours"><td>AeroRSI (SFT init.)</td><td>75.32</td><td>82.19</td><td>46.24</td><td>67.49</td></tr>
+              <tr class="ours"><td>AeroRSI (DPO init.)</td><td>76.52</td><td>79.65</td><td>53.55</td><td>69.85</td></tr>
+            </tbody>
+          </table>
+        </div>
+    <div class="cards">
+      <figure class="card chart">
+        <h3>Overall success rate by round</h3>
+        <div class="plot">
+          <div style="display: grid; gap: 6px; width: 100%;">
+            <div class="legend"><span><i style="background: #2c6aa8"></i>From the supervised policy</span><span><i style="background: #d9822b"></i>From AeroDPO (prior SOTA baseline)</span></div>
+            <svg viewBox="0 0 440 260" role="img" aria-label="Overall test SR by round. From the supervised policy: 46.39, 57.60, 66.02, 67.49. From AeroDPO: 56.87, 63.39, 66.22, 69.85.">
+          <!-- y: 40..75 % mapped to 220..20; x: rounds 0..3 mapped to 60..400 -->
+          <g class="grid"><line x1="60" y1="220" x2="410" y2="220"/><line x1="60" y1="162.9" x2="410" y2="162.9"/><line x1="60" y1="105.7" x2="410" y2="105.7"/><line x1="60" y1="48.6" x2="410" y2="48.6"/></g>
+          <text x="50" y="224" text-anchor="end">40</text><text x="50" y="166.9" text-anchor="end">50</text><text x="50" y="109.7" text-anchor="end">60</text><text x="50" y="52.6" text-anchor="end">70</text>
+          <text x="16" y="124" transform="rotate(-90 16 124)" text-anchor="middle">Test SR (%)</text>
+          <text x="60" y="244" text-anchor="middle">0</text><text x="173.3" y="244" text-anchor="middle">1</text><text x="286.7" y="244" text-anchor="middle">2</text><text x="400" y="244" text-anchor="middle">3</text>
+          <text x="230" y="258" text-anchor="middle">Round</text>
+          <polyline class="dpo" points="60,123.6 173.3,86.3 286.7,70.2 400,49.4"/>
+          <polyline class="sft" points="60,180.6 173.3,116.6 286.7,68.5 400,60.1"/>
+          <g class="dot-dpo"><circle cx="60" cy="123.6" r="4"/><circle cx="173.3" cy="86.3" r="4"/><circle cx="286.7" cy="70.2" r="4"/><circle cx="400" cy="49.4" r="4"/></g>
+          <g class="dot-sft"><circle cx="60" cy="180.6" r="4"/><circle cx="173.3" cy="116.6" r="4"/><circle cx="286.7" cy="68.5" r="4"/><circle cx="400" cy="60.1" r="4"/></g>
+          <text class="v" x="68" y="196">46.4</text><text class="v" x="68" y="116">56.9</text><text class="v" x="181" y="132">57.6</text><text class="v" x="181" y="80">63.4</text>
+          <text class="v" x="392" y="78" text-anchor="end">67.5</text><text class="v" x="392" y="42" text-anchor="end">69.9</text>
+        </svg>
+          </div>
+        </div>
+        <p>Both starting points gain in&nbsp;every&nbsp;round.</p>
+      </figure>
+      <figure class="card">
+        <h3>How test episodes end</h3>
+        <div class="plot"><img src="static/failure_types.png" width="1365" height="496" alt="Share of test routes ending in each failure type for rounds 0 to 3."></div>
+        <p>Collisions and wrong-way flights fall;&nbsp;timeouts&nbsp;grow.</p>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="band tint" aria-labelledby="bibtex">
+  <div class="inner">
+    <h2 id="bibtex">BibTeX</h2>
+    <div class="bib">
+      <button type="button" id="copy-bib">Copy</button>
+      <pre id="bib-text">@article{wu2026aerorsi,
+  title   = {AeroRSI: Recursive Self-Improvement for Aerial Vision-Language Navigation},
+  author  = {Wu, Shiwei and Pan, Yuwen and Li, Zhi and Li, Yaowen and Zhou, Yan and Xu, Xuemiao and Liu, Yu},
+  journal = {arXiv preprint arXiv:2611.24077},
+  year    = {2026}
+}</pre>
+    </div>
+  </div>
+</section>
+
+
+<script>
+// Each video slot shows its placeholder until its file exists; then the video replaces it.
+document.querySelectorAll(".slot[data-video]").forEach(function (slot) {
+  var video = document.createElement("video");
+  var loop = slot.hasAttribute("data-loop");  // short demo loops play like GIFs; the reel has controls and sound
+  video.muted = true; video.loop = true; video.playsInline = true; video.autoplay = true; video.controls = !loop;
+  video.preload = "metadata";
+  if (slot.dataset.poster) video.poster = slot.dataset.poster;
+  video.addEventListener("loadedmetadata", function () {
+    slot.querySelector(".ph").hidden = true;
+    slot.appendChild(video);
+    video.play().catch(function () {});
+  }, { once: true });
+  video.src = slot.dataset.video;
+});
+document.getElementById("copy-bib").addEventListener("click", function () {
+  var button = this, text = document.getElementById("bib-text");
+  function selectText() {
+    var range = document.createRange();
+    range.selectNodeContents(text);
+    var selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    button.textContent = "Selected";
+  }
+  try {
+    navigator.clipboard.writeText(text.textContent).then(function () { button.textContent = "Copied"; }, selectText);
+  } catch (error) {
+    selectText();
+  }
+});
+</script>
+</body>
+</html>
